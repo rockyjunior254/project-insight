@@ -1,0 +1,5 @@
+# Production Dependencies for Temporal Feature Pipeline
+duckdb==1.5.5
+pyarrow==25.0.1
+pydantic==2.13.4
+
