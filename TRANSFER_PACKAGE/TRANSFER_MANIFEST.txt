@@ -24,4 +24,4 @@ b4d1f4b38267ec9e0da3fa05a1ead7e72cd681dca8342242a7786b93c7af4d8e  ./task.toml
 e5266ae10c5add25ad3c1b752d3b704bad62dda910111b7ae8ee9734d5745a4f  ./tests/data/raw_events.jsonl
 2ffffad6030e1c6aaa25e712ce1a962074d584af784a16740e9fe6a26b07161e  ./tests/requirements.txt
 c21b23115c3fc335cc7297a7cd64879ea795253e70d8e0140b5ef3d399b8e399  ./tests/test.sh
-e4f4da5b191874695b285a27c3aa4f1b2d4deb0949e22f5cb52b8829ea4f71a7  ./tests/test_outputs.py
+c47dcd402c85e120761be12bf3a15a414e373e350519dd1f8fd9181628643751  ./tests/test_outputs.py

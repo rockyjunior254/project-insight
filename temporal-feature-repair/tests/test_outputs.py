@@ -4,7 +4,11 @@ Comprehensive Verifier Suite for Temporal Feature Store Repair.
 Tests evaluate point-in-time correctness, absence of future leakage,
 Slowly Changing Dimension (SCD Type-2) validity, event reconciliation
 (out-of-order arrival, late events, duplicates, corrections, cancellations),
-rolling window calculations, schema invariants, and idempotency.
+rolling-window calculations, output schema invariants, and primary-key grain.
+
+Repeated pipeline/database execution is an engineering requirement in the task
+instruction, but this separate verifier intentionally does not execute hidden
+agent source to inspect it.
 """
 
 import csv
