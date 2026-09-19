@@ -62,12 +62,13 @@ print('Task Schema Valid:', task_cfg.task.name)
 
 ---
 
-## 5. Build Environment Container
+## 5. Build Agent and Separate Verifier Containers
 
-Build the agent runtime Docker container cleanly:
+Build the agent runtime and the Harbor-compatible separate verifier images cleanly:
 
 ```bash
 docker build -t harbor-temporal-feature-repair:latest environment/
+docker build -t harbor-temporal-feature-repair-verifier:latest tests/
 ```
 
 ---
@@ -91,10 +92,9 @@ docker run --rm \
 
 # Run the test suite against flawed output
 docker run --rm \
-  -v "$(pwd)/tests:/tests:ro" \
   -v "$RUNTIME_DIR/output:/app/output" \
   -v "$RUNTIME_DIR/logs:/logs" \
-  harbor-temporal-feature-repair:latest \
+  harbor-temporal-feature-repair-verifier:latest \
   bash /tests/test.sh
 
 cat "$RUNTIME_DIR/logs/verifier/reward.txt"  # Output: 0
@@ -120,10 +120,9 @@ docker run --rm \
 
 # Run verifier test suite
 docker run --rm \
-  -v "$(pwd)/tests:/tests:ro" \
   -v "$RUNTIME_DIR/output:/app/output" \
   -v "$RUNTIME_DIR/logs:/logs" \
-  harbor-temporal-feature-repair:latest \
+  harbor-temporal-feature-repair-verifier:latest \
   bash /tests/test.sh
 
 cat "$RUNTIME_DIR/logs/verifier/reward.txt"  # Output: 1

@@ -3,8 +3,6 @@ schema_version = "1.4"
 artifacts = [
     "/app/output/features.parquet",
     "/app/output/validation.json",
-    "/logs/verifier/reward.txt",
-    "/logs/verifier/ctrf.json",
 ]
 
 [task]
@@ -30,8 +28,9 @@ keywords = [
 author_name = "Benchmark Engineering Team"
 author_email = "benchmark-eng@example.org"
 difficulty = "hard"
-category = "data_engineering"
+category = "software_engineering"
 tags = [
+    "data-engineering",
     "temporal-databases",
     "feature-engineering",
     "data-pipelines",
@@ -40,14 +39,17 @@ tags = [
     "sql",
     "python",
 ]
-expert_time_estimate_min = 45.0
+expert_time_estimate_min = 60.0
 junior_time_estimate_min = 120.0
 
 [verifier]
 timeout_sec = 600.0
-collect = []
+environment_mode = "separate"
 
-[verifier.env]
+[verifier.environment]
+network_mode = "public"
+build_timeout_sec = 600.0
+os = "linux"
 
 [agent]
 timeout_sec = 600.0
@@ -57,7 +59,3 @@ network_mode = "public"
 build_timeout_sec = 600.0
 os = "linux"
 mcp_servers = []
-
-[environment.env]
-
-[solution.env]
