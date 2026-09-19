@@ -10,7 +10,7 @@ name = "terminal-bench/temporal-feature-repair"
 version = "1.0.0"
 description = "Diagnose and repair subtle temporal data engineering defects in an inherited point-in-time ML feature pipeline processing SCD Type-2 dimensions and out-of-order events."
 authors = [
-    { name = "Benchmark Engineering Team", email = "benchmark-eng@example.org" }
+    { name = "rockyjunior254", email = "rockyjunior254@gmail.com" }
 ]
 keywords = [
     "data-engineering",
@@ -25,8 +25,8 @@ keywords = [
 ]
 
 [metadata]
-author_name = "Benchmark Engineering Team"
-author_email = "benchmark-eng@example.org"
+author_name = "rockyjunior254"
+author_email = "rockyjunior254@gmail.com"
 difficulty = "hard"
 category = "software_engineering"
 tags = [
