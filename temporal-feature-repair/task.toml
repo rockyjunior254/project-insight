@@ -27,7 +27,9 @@ keywords = [
 [metadata]
 author_name = "rockyjunior254"
 author_email = "rockyjunior254@gmail.com"
-difficulty = "hard"
+difficulty_explanation = "Repairing the inherited pipeline requires coordinating ingestion-time visibility, per-cutoff event-version resolution, cancellation state, SCD Type-2 intervals, rolling features, and idempotent staging across four historical cutoffs."
+solution_explanation = "A correct repair reconstructs each cutoff from only records known at that time, resolves the active event state, applies the historical customer profile interval, and emits one deterministic feature row per cutoff and customer."
+verification_explanation = "The isolated verifier reconstructs every expected row from private input copies and checks artifacts, schema, grain, and temporal feature values without importing the oracle or agent source."
 category = "software_engineering"
 tags = [
     "data-engineering",
@@ -39,8 +41,8 @@ tags = [
     "sql",
     "python",
 ]
-expert_time_estimate_min = 60.0
-junior_time_estimate_min = 120.0
+expert_time_estimate_hours = 3.0
+relevant_experience = "Senior data engineering or ML-platform experience with feature stores, event reconciliation, SCD Type-2 dimensions, SQL/Python pipelines, and leakage-safe historical training data."
 
 [verifier]
 timeout_sec = 600.0
@@ -52,7 +54,7 @@ build_timeout_sec = 600.0
 os = "linux"
 
 [agent]
-timeout_sec = 600.0
+timeout_sec = 7200.0
 
 [environment]
 network_mode = "public"

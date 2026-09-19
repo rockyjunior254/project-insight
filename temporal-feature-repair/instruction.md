@@ -52,4 +52,4 @@ or executing the pipeline modules produces the exact verified temporal feature s
 - **SCD Type-2 Temporal Joins**: Customer dimension attributes (`segment`, `risk_tier`, `credit_limit`, `country`) must be joined using the valid interval `effective_from <= T_cutoff < effective_to`. Never join solely on `is_current = True`.
 - **Idempotency**: Running the pipeline multiple times or backfilling must produce identical, deterministic results without duplicate row inflation in database tables or parquet outputs.
 
-You have 600 seconds to complete this task. Do not cheat by using online solutions or hints specific to this task.
+You have 7200 seconds to complete this task. Do not cheat by using online solutions or hints specific to this task.

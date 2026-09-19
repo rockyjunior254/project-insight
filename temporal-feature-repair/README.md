@@ -11,7 +11,7 @@ This task requires a benchmark agent to act as a senior data/ML engineer to trac
 
 ## Difficulty explanation
 
-This is a hard, approximately 60-minute expert task. A correct repair must coordinate event-time windows with an ingestion-time knowledge horizon, reconstruct the current event version separately at each cutoff, apply cancellation state, perform an interval SCD Type-2 join, and make persistent staging idempotent. These requirements interact across 2,180 event records, 20 customers, and four historical cutoffs; a local patch to any one stage is insufficient.
+This is a hard, approximately three-hour best-case expert task. A correct repair must coordinate event-time windows with an ingestion-time knowledge horizon, reconstruct the current event version separately at each cutoff, apply cancellation state, perform an interval SCD Type-2 join, and make persistent staging idempotent. These requirements interact across 2,180 event records, 20 customers, and four historical cutoffs; a local patch to any one stage is insufficient.
 
 ## Real-data provenance
 The dataset is deterministically derived from the real-world **UCI Online Retail** dataset (`https://github.com/dbdmg/data-science-lab/raw/master/datasets/online_retail.csv`), containing authentic transnational transactions from a UK-based registered non-store online retail platform.
