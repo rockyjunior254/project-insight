@@ -77,20 +77,27 @@ docker build -t harbor-temporal-feature-repair:latest environment/
 To verify that the unmodified, flawed starting state properly fails verification:
 
 ```bash
+# Keep output, warehouse, and verifier logs across the separate containers.
+RUNTIME_DIR="$(mktemp -d)"
+
 # Run the pipeline inside the container
 docker run --rm \
   -v "$(pwd)/environment/src:/app/src" \
-  -v "$(pwd)/environment/data:/app/data" \
+  -v "$(pwd)/environment/data:/app/data:ro" \
+  -v "$RUNTIME_DIR/output:/app/output" \
+  -v "$RUNTIME_DIR/warehouse:/app/warehouse" \
   harbor-temporal-feature-repair:latest \
   python3 /app/src/pipeline/main.py
 
 # Run the test suite against flawed output
 docker run --rm \
-  -v "$(pwd)/tests:/tests" \
+  -v "$(pwd)/tests:/tests:ro" \
+  -v "$RUNTIME_DIR/output:/app/output" \
+  -v "$RUNTIME_DIR/logs:/logs" \
   harbor-temporal-feature-repair:latest \
   bash /tests/test.sh
 
-cat /logs/verifier/reward.txt  # Output: 0
+cat "$RUNTIME_DIR/logs/verifier/reward.txt"  # Output: 0
 ```
 
 ---
@@ -100,20 +107,26 @@ cat /logs/verifier/reward.txt  # Output: 0
 To execute the reference oracle solution and verify that it passes 100% of the tests:
 
 ```bash
+# Use a fresh persistent runtime directory for the oracle and verifier pair.
+RUNTIME_DIR="$(mktemp -d)"
+
 # Run oracle solution
 docker run --rm \
-  -v "$(pwd)/solution:/app/solution" \
-  -v "$(pwd)/environment/data:/app/data" \
+  -v "$(pwd)/solution:/app/solution:ro" \
+  -v "$(pwd)/environment/data:/app/data:ro" \
+  -v "$RUNTIME_DIR/output:/app/output" \
   harbor-temporal-feature-repair:latest \
   bash /app/solution/solve.sh
 
 # Run verifier test suite
 docker run --rm \
-  -v "$(pwd)/tests:/tests" \
+  -v "$(pwd)/tests:/tests:ro" \
+  -v "$RUNTIME_DIR/output:/app/output" \
+  -v "$RUNTIME_DIR/logs:/logs" \
   harbor-temporal-feature-repair:latest \
   bash /tests/test.sh
 
-cat /logs/verifier/reward.txt  # Output: 1
+cat "$RUNTIME_DIR/logs/verifier/reward.txt"  # Output: 1
 ```
 
 ---
@@ -129,4 +142,3 @@ harbor trial start -p . -a oracle
 # Run agent trial (e.g. claude-code or custom agent)
 harbor trial start -p . -a claude-code -m claude-sonnet-4-6
 ```
-

@@ -29,13 +29,11 @@ The reference solution and verifier enforce four critical temporal invariants:
 
 ## Verification & Anti-Cheat Approach
 - The test suite is implemented in `tests/test_outputs.py` and run via `tests/test.sh`.
-- The verifier independently parses the output artifacts (`/app/output/features.parquet` and `/app/output/validation.json`).
+- The verifier independently reconstructs every expected feature row from the raw event stream, SCD history, and cutoffs; it does not import or compare against the oracle.
 - Tests evaluate:
   - Artifact completeness, parquet schema, data types, and primary key grain `(cutoff_id, customer_id)`.
-  - Point-in-time dimension accuracy across multiple cutoff points without leaking current state.
-  - Event deduplication, cancellation exclusion, and absence of future event leakage.
-  - Mathematical consistency across rolling window aggregations ($W_{30d} \le W_{90d} \le \text{Lifetime}$).
-  - Composite stress reconstruction combining simultaneous dimension shift, late arrival, and revision on high-activity accounts.
+  - Exact point-in-time dimension state, event reconciliation, cancellation exclusion, and information-horizon gating for all 80 evaluation points.
+  - Exact rolling-window, lifetime, recency, and utilization values, plus artifact schema and primary-key grain.
 - The verifier writes its standard result to `/logs/verifier/ctrf.json` and score to `/logs/verifier/reward.txt`.
 
 ## Reference Solution Architecture

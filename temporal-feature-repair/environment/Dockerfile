@@ -25,4 +25,4 @@ COPY data/ /app/data/
 # Create output and warehouse directories
 RUN mkdir -p /app/output /app/warehouse /app/logs
 
-ENV PYTHONPATH=/app
+ENV PYTHONPATH=/app/src:/app

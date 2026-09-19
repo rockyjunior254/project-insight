@@ -1,3 +1,11 @@
+import sys
+from pathlib import Path
+
+# Ensure pipeline package is importable regardless of working directory
+_SRC_DIR = str(Path(__file__).resolve().parent.parent)
+if _SRC_DIR not in sys.path:
+    sys.path.insert(0, _SRC_DIR)
+
 import json
 import duckdb
 from pipeline.config import (
