@@ -29,23 +29,24 @@ The task requires four critical temporal invariants:
 1. **As-Of Information Horizon**: For cutoff timestamp $T_{\text{cutoff}}$, any record with $\text{ingestion\_time} > T_{\text{cutoff}}$ did not exist in the lakehouse and cannot participate in feature derivation for that cutoff.
 2. **Bi-temporal Point-in-Time Event Resolution**: For an event with physical occurrence $\text{event\_time} \le T_{\text{cutoff}}$, its active state at $T_{\text{cutoff}}$ is determined by the highest $(\text{version}, \text{ingestion\_time})$ strictly satisfying $\text{ingestion\_time} \le T_{\text{cutoff}}$. Subsequent corrections ingested after $T_{\text{cutoff}}$ belong strictly to future feature calculations.
 3. **Point-in-Time Dimension Alignment**: Customer dimension attributes must satisfy $\text{effective\_from} \le T_{\text{cutoff}} < \text{effective\_to}$.
-4. **Idempotent Storage Re-execution**: Staging tables and lakehouse layers must guarantee idempotent upsert/reconciliation without multiplying record counts on backfill execution. The separate verifier confirms the final output's unique grain but cannot directly rerun or inspect agent-controlled pipeline storage without breaking verifier isolation.
+4. **Idempotent Storage Re-execution**: Staging tables and lakehouse layers must guarantee idempotent upsert/reconciliation without multiplying record counts on backfill execution. A Harbor verifier-controlled collect hook snapshots normalized feature rows and all persistent warehouse tables, removes the prior output artifacts, reruns `/app/src/pipeline/main.py`, and supplies before/after evidence to the separate verifier.
 
 ## Verification explanation
 
 - Harbor runs the test suite in the configured separate verifier environment built from `tests/Dockerfile`; the agent image does not contain `tests/` or `solution/`.
 - The verifier image contains a private, byte-identical copy of the supplied input data so it can independently reconstruct expected results without using the oracle or agent-controlled source files.
 - The test suite is implemented in `tests/test_outputs.py` and run via `tests/test.sh`.
+- Before artifact transfer, Harbor runs the configured `[[verifier.collect]]` hook in the main environment. It captures output and persistent warehouse state, removes prior output artifacts so the pipeline must recreate them, reruns the pipeline entry point, and writes `/app/output/idempotency_report.json`; this is a verifier-controlled artifact rather than an agent deliverable.
 - The verifier independently reconstructs every expected feature row from the raw event stream, SCD history, and cutoffs; it does not import or compare against the oracle.
 - Tests evaluate:
   - Artifact completeness, parquet schema, data types, and primary key grain `(cutoff_id, customer_id)`.
   - Exact point-in-time dimension state, event reconciliation, cancellation exclusion, and information-horizon gating for all 80 evaluation points.
 - Rolling-window, lifetime, recency, and utilization values at their documented precision, with floating values compared using an absolute tolerance of `1e-6` and zero relative tolerance, plus artifact schema and primary-key grain.
-- The Oracle is separately run twice during task maintenance to demonstrate deterministic reference artifacts. The verifier does not claim to independently prove repeated pipeline/database execution.
+- The verifier validates the collected idempotency evidence: the second pipeline run must succeed, normalized feature rows and unique grain must remain unchanged, and persistent staging/warehouse table counts and content fingerprints must not change.
 - The verifier writes its standard CTRF report to `/logs/verifier/ctrf.json` and reward to `/logs/verifier/reward.txt`; these are verifier logs, not agent artifacts.
 
 ## Solution explanation
-`solution/solve.sh` invokes `solution/oracle_engine.py`, which provides a clean, independent implementation of point-in-time bi-temporal evaluation:
+`solution/solve.sh` materializes the reference pipeline entry point for the Oracle agent, then invokes the independent `solution/oracle_engine.py` implementation of point-in-time bi-temporal evaluation. Normal agents still start with the inherited flawed `/app/src/pipeline` source:
 - Loads the raw data directly into in-memory temporal data structures.
 - For each cutoff, filters the event stream to $\text{ingestion\_time} \le T_{\text{cutoff}}$, resolves the latest event versions, filters out voided transactions, computes exact rolling window aggregations, joins the point-in-time SCD dimension, and writes the Parquet and JSON artifacts.
 

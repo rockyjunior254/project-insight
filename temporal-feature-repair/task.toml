@@ -3,6 +3,7 @@ schema_version = "1.4"
 artifacts = [
     "/app/output/features.parquet",
     "/app/output/validation.json",
+    "/app/output/idempotency_report.json",
 ]
 
 [task]
@@ -29,7 +30,7 @@ author_name = "rockyjunior254"
 author_email = "rockyjunior254@gmail.com"
 difficulty_explanation = "Repairing the inherited pipeline requires coordinating ingestion-time visibility, per-cutoff event-version resolution, cancellation state, SCD Type-2 intervals, rolling features, and idempotent staging across four historical cutoffs."
 solution_explanation = "A correct repair reconstructs each cutoff from only records known at that time, resolves the active event state, applies the historical customer profile interval, and emits one deterministic feature row per cutoff and customer."
-verification_explanation = "The isolated verifier reconstructs every expected row from private input copies and checks artifacts, schema, grain, and temporal feature values without importing the oracle or agent source."
+verification_explanation = "The isolated verifier reconstructs every expected row from private input copies and checks artifacts, schema, grain, temporal feature values, and verifier-collected post-rerun idempotency evidence without importing the oracle or agent source."
 category = "software_engineering"
 tags = [
     "data-engineering",
@@ -47,6 +48,175 @@ relevant_experience = "Senior data engineering or ML-platform experience with fe
 [verifier]
 timeout_sec = 600.0
 environment_mode = "separate"
+
+[[verifier.collect]]
+timeout_sec = 180.0
+command = '''
+python3 - <<'PY'
+import datetime as dt
+import hashlib
+import json
+import os
+import subprocess
+import sys
+import traceback
+from pathlib import Path
+
+import duckdb
+import pyarrow.parquet as pq
+
+app_dir = Path(os.getenv("APP_DIR", "/app"))
+output_dir = app_dir / "output"
+features_path = output_dir / "features.parquet"
+validation_path = output_dir / "validation.json"
+warehouse_path = app_dir / "warehouse" / "lakehouse.duckdb"
+pipeline_path = app_dir / "src" / "pipeline" / "main.py"
+report_path = output_dir / "idempotency_report.json"
+
+
+def normalize(value):
+    if isinstance(value, (dt.datetime, dt.date, dt.time)):
+        return value.isoformat(sep=" ") if isinstance(value, dt.datetime) else value.isoformat()
+    if isinstance(value, bytes):
+        return value.hex()
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)
+
+
+def digest(value):
+    encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    return hashlib.sha256(encoded.encode()).hexdigest()
+
+
+def feature_snapshot(path):
+    table = pq.read_table(path)
+    rows = [
+        {column: normalize(value) for column, value in row.items()}
+        for row in table.to_pylist()
+    ]
+    rows.sort(key=lambda row: (str(row.get("cutoff_id")), str(row.get("customer_id"))))
+    keys = [(row.get("cutoff_id"), row.get("customer_id")) for row in rows]
+    return {
+        "row_count": len(rows),
+        "duplicate_key_count": len(keys) - len(set(keys)),
+        "semantic_rows_sha256": digest(rows),
+    }
+
+
+def quote_identifier(identifier):
+    return '"' + identifier.replace('"', '""') + '"'
+
+
+def warehouse_snapshot(path):
+    con = duckdb.connect(str(path), read_only=True)
+    try:
+        names = [
+            row[0]
+            for row in con.execute(
+                """
+                SELECT table_name
+                FROM information_schema.tables
+                WHERE table_schema = 'main' AND table_type = 'BASE TABLE'
+                ORDER BY table_name
+                """
+            ).fetchall()
+        ]
+        tables = {}
+        for name in names:
+            cursor = con.execute(f"SELECT * FROM {quote_identifier(name)} ORDER BY ALL")
+            columns = [column[0] for column in cursor.description]
+            rows = [
+                {column: normalize(value) for column, value in zip(columns, row)}
+                for row in cursor.fetchall()
+            ]
+            tables[name] = {
+                "row_count": len(rows),
+                "semantic_rows_sha256": digest({"columns": columns, "rows": rows}),
+            }
+        return tables
+    finally:
+        con.close()
+
+
+def capture(label, report):
+    report["features"][label] = feature_snapshot(features_path)
+    tables = warehouse_snapshot(warehouse_path)
+    report["persistent_tables"][label] = tables
+    report["staging_tables"][label] = {
+        name: snapshot for name, snapshot in tables.items() if name.startswith("staging_")
+    }
+
+
+report = {
+    "collector_version": 1,
+    "pipeline_entrypoint": str(pipeline_path),
+    "warehouse_path": str(warehouse_path),
+    "errors": [],
+    "features": {},
+    "persistent_tables": {},
+    "staging_tables": {},
+}
+try:
+    capture("before", report)
+except Exception:
+    report["errors"].append({"phase": "before_snapshot", "detail": traceback.format_exc()})
+
+try:
+    report["preexisting_outputs"] = {
+        "features_parquet": features_path.is_file() and features_path.stat().st_size > 0,
+        "validation_json": validation_path.is_file() and validation_path.stat().st_size > 0,
+    }
+    features_path.unlink(missing_ok=True)
+    validation_path.unlink(missing_ok=True)
+    result = subprocess.run(
+        [sys.executable, str(pipeline_path)],
+        cwd=str(app_dir),
+        env={**os.environ, "APP_DIR": str(app_dir)},
+        capture_output=True,
+        text=True,
+        timeout=150,
+    )
+    report["second_run"] = {
+        "succeeded": result.returncode == 0,
+        "return_code": result.returncode,
+        "rebuilt_outputs": {
+            "features_parquet": features_path.is_file() and features_path.stat().st_size > 0,
+            "validation_json": validation_path.is_file() and validation_path.stat().st_size > 0,
+        },
+        "stdout_tail": result.stdout[-4000:],
+        "stderr_tail": result.stderr[-4000:],
+    }
+except Exception:
+    report["second_run"] = {
+        "succeeded": False,
+        "return_code": None,
+        "rebuilt_outputs": {"features_parquet": False, "validation_json": False},
+    }
+    report["errors"].append({"phase": "second_run", "detail": traceback.format_exc()})
+
+try:
+    capture("after", report)
+except Exception:
+    report["errors"].append({"phase": "after_snapshot", "detail": traceback.format_exc()})
+
+before_features = report["features"].get("before")
+after_features = report["features"].get("after")
+before_tables = report["persistent_tables"].get("before")
+after_tables = report["persistent_tables"].get("after")
+report["feature_rows_identical"] = bool(before_features and after_features and before_features == after_features)
+report["persistent_tables_unchanged"] = bool(before_tables is not None and before_tables == after_tables)
+report["passed"] = bool(
+    not report["errors"]
+    and report["second_run"]["succeeded"]
+    and all(report["second_run"]["rebuilt_outputs"].values())
+    and report["feature_rows_identical"]
+    and report["persistent_tables_unchanged"]
+)
+output_dir.mkdir(parents=True, exist_ok=True)
+report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+PY
+'''
 
 [verifier.environment]
 network_mode = "public"
