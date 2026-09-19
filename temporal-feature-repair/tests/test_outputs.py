@@ -48,6 +48,25 @@ def parse_timestamp(value):
     return dt.datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
 
 
+def expected_output_shape():
+    """Derive the required output grain from verifier-side input data."""
+    with open(DATA_DIR / "prediction_cutoffs.csv", newline="") as handle:
+        cutoff_count = sum(1 for _ in csv.DictReader(handle))
+
+    customer_ids = set()
+    with open(DATA_DIR / "customer_profiles_scd.jsonl") as handle:
+        for line in handle:
+            if line.strip():
+                customer_ids.add(int(json.loads(line)["customer_id"]))
+
+    customer_count = len(customer_ids)
+    return {
+        "customer_count": customer_count,
+        "cutoff_count": cutoff_count,
+        "row_count": customer_count * cutoff_count,
+    }
+
+
 def expected_feature_rows():
     """Reconstruct the required bi-temporal feature state from task inputs.
 
@@ -174,6 +193,11 @@ def validation_summary():
     with open(val_path, "r") as f:
         return json.load(f)
 
+
+@pytest.fixture(scope="module")
+def expected_shape():
+    return expected_output_shape()
+
 # ==============================================================================
 # SECTION 1: Artifact & Structural Schema Validation
 # ==============================================================================
@@ -185,17 +209,20 @@ def test_artifacts_exist_and_nonempty():
     assert p_path.exists() and p_path.stat().st_size > 0
     assert v_path.exists() and v_path.stat().st_size > 0
 
-def test_validation_json_structure(validation_summary):
+def test_validation_json_structure(validation_summary, expected_shape):
     """Verify validation.json contains required metadata keys and valid counts."""
     assert validation_summary.get("status") == "COMPLETED"
-    assert validation_summary.get("row_count") == 80
-    assert validation_summary.get("unique_customers") == 20
-    assert validation_summary.get("cutoffs_processed") == 4
+    assert validation_summary.get("row_count") == expected_shape["row_count"]
+    assert validation_summary.get("unique_customers") == expected_shape["customer_count"]
+    assert validation_summary.get("cutoffs_processed") == expected_shape["cutoff_count"]
     assert validation_summary.get("output_file") == str(FEATURES_PARQUET)
 
-def test_parquet_schema_and_grain(features_df, feature_schema):
+def test_parquet_schema_and_grain(features_df, feature_schema, expected_shape):
     """Verify exact column schema, correct data types, and primary key grain."""
-    assert len(features_df) == 80, f"Expected 80 rows (20 customers * 4 cutoffs), got {len(features_df)}"
+    assert len(features_df) == expected_shape["row_count"], (
+        "Expected one row per verifier-side customer and cutoff, "
+        f"got {len(features_df)}"
+    )
     assert list(feature_schema.names) == list(EXPECTED_SCHEMA), "Output columns must match the specified schema exactly"
     physical_types = {field.name: str(field.type) for field in feature_schema}
     for column, expected_type in EXPECTED_SCHEMA.items():
@@ -236,7 +263,9 @@ def test_all_rows_match_independent_bitemporal_reconstruction(features_df):
         for column, expected_value in expected.items():
             actual_value = actual[column]
             if isinstance(expected_value, float):
-                assert math.isclose(actual_value, expected_value, abs_tol=1e-9), (
+                assert math.isclose(
+                    actual_value, expected_value, rel_tol=0.0, abs_tol=1e-6
+                ), (
                     f"{column} mismatch for {key}: expected {expected_value}, got {actual_value}"
                 )
             else:

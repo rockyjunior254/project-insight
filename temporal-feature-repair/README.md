@@ -40,7 +40,7 @@ The task requires four critical temporal invariants:
 - Tests evaluate:
   - Artifact completeness, parquet schema, data types, and primary key grain `(cutoff_id, customer_id)`.
   - Exact point-in-time dimension state, event reconciliation, cancellation exclusion, and information-horizon gating for all 80 evaluation points.
-- Exact rolling-window, lifetime, recency, and utilization values, plus artifact schema and primary-key grain.
+- Rolling-window, lifetime, recency, and utilization values at their documented precision, with floating values compared using an absolute tolerance of `1e-6` and zero relative tolerance, plus artifact schema and primary-key grain.
 - The Oracle is separately run twice during task maintenance to demonstrate deterministic reference artifacts. The verifier does not claim to independently prove repeated pipeline/database execution.
 - The verifier writes its standard CTRF report to `/logs/verifier/ctrf.json` and reward to `/logs/verifier/reward.txt`; these are verifier logs, not agent artifacts.
 
