@@ -25,11 +25,11 @@ The dataset is deterministically derived from the real-world **UCI Online Retail
 - Customer dimension state is maintained as an SCD Type-2 dimension (`customer_profiles_scd.jsonl`) with realistic lifecycle tier migrations (`effective_from`, `effective_to`, `is_current`).
 
 ## Temporal invariants and invariant reasoning
-The reference solution and verifier enforce four critical temporal invariants:
+The task requires four critical temporal invariants:
 1. **As-Of Information Horizon**: For cutoff timestamp $T_{\text{cutoff}}$, any record with $\text{ingestion\_time} > T_{\text{cutoff}}$ did not exist in the lakehouse and cannot participate in feature derivation for that cutoff.
 2. **Bi-temporal Point-in-Time Event Resolution**: For an event with physical occurrence $\text{event\_time} \le T_{\text{cutoff}}$, its active state at $T_{\text{cutoff}}$ is determined by the highest $(\text{version}, \text{ingestion\_time})$ strictly satisfying $\text{ingestion\_time} \le T_{\text{cutoff}}$. Subsequent corrections ingested after $T_{\text{cutoff}}$ belong strictly to future feature calculations.
 3. **Point-in-Time Dimension Alignment**: Customer dimension attributes must satisfy $\text{effective\_from} \le T_{\text{cutoff}} < \text{effective\_to}$.
-4. **Idempotent Storage Re-execution**: Staging tables and lakehouse layers must guarantee idempotent upsert/reconciliation without multiplying record counts on backfill execution.
+4. **Idempotent Storage Re-execution**: Staging tables and lakehouse layers must guarantee idempotent upsert/reconciliation without multiplying record counts on backfill execution. The separate verifier confirms the final output's unique grain but cannot directly rerun or inspect agent-controlled pipeline storage without breaking verifier isolation.
 
 ## Verification explanation
 
@@ -40,7 +40,8 @@ The reference solution and verifier enforce four critical temporal invariants:
 - Tests evaluate:
   - Artifact completeness, parquet schema, data types, and primary key grain `(cutoff_id, customer_id)`.
   - Exact point-in-time dimension state, event reconciliation, cancellation exclusion, and information-horizon gating for all 80 evaluation points.
-  - Exact rolling-window, lifetime, recency, and utilization values, plus artifact schema and primary-key grain.
+- Exact rolling-window, lifetime, recency, and utilization values, plus artifact schema and primary-key grain.
+- The Oracle is separately run twice during task maintenance to demonstrate deterministic reference artifacts. The verifier does not claim to independently prove repeated pipeline/database execution.
 - The verifier writes its standard CTRF report to `/logs/verifier/ctrf.json` and reward to `/logs/verifier/reward.txt`; these are verifier logs, not agent artifacts.
 
 ## Solution explanation
