@@ -1,0 +1,160 @@
+schema_version = "1.4"
+artifacts = [
+  "/app/output/model_coefficients.parquet",
+  "/app/output/model_diagnostics.json",
+  "/app/output/predicted_rates.parquet",
+  "/app/output/validation.json",
+  "/app/output/determinism_report.json",
+]
+
+[task]
+name = "afterquery/purchase-inference"
+version = "1.0.0"
+description = "Infer and calibrate customer-level retail-record intensity with deterministic Poisson count models and uncertainty-aware scientific outputs."
+authors = [{ name = "rockyjunior254", email = "rockyjunior254@gmail.com" }]
+keywords = ["science", "statistics", "count-models", "retail", "time-series", "uncertainty"]
+
+[metadata]
+category = "Science"
+domain = "mathematical-sciences"
+field = "statistics"
+subcategory = "Statistics & Machine Learning"
+subfield = "time-series inference and uncertainty quantification"
+author_name = "rockyjunior254"
+author_email = "rockyjunior254@gmail.com"
+difficulty_explanation = "The task requires a complete customer-day observation grid, exposure-aware count inference, two nested model fits, numerical model comparison, uncertainty quantification, and stable scientific artifacts. The released customers form a curated case study rather than a population-representative sample."
+solution_explanation = "A valid solution builds the specified customer-day grid from every supplied record, fits both Poisson GLMs with the customer exposure offset, applies the explicit AIC rule, and writes the required coefficient, diagnostic, prediction, and validation artifacts."
+verification_explanation = "A no-network, separate verifier independently reconstructs the customer-day grid and reference fits from its own copy of the transaction data, checks explicit numerical tolerances, and validates verifier-collected semantic fingerprints before and after a second pipeline invocation."
+relevant_experience = "Applied statistics, generalized linear models, Poisson regression, model selection, uncertainty quantification, and reproducible scientific computing."
+expert_time_estimate_hours = 3.5
+tags = ["statistics", "poisson-regression", "retail", "model-selection", "uncertainty-quantification", "scientific-computing"]
+
+[agent]
+timeout_sec = 9000.0
+
+[environment]
+os = "linux"
+network_mode = "public"
+build_timeout_sec = 900.0
+
+[verifier]
+timeout_sec = 900.0
+environment_mode = "separate"
+network_mode = "no-network"
+
+[verifier.environment]
+os = "linux"
+network_mode = "no-network"
+build_timeout_sec = 900.0
+
+[[verifier.collect]]
+service = "main"
+timeout_sec = 600.0
+command = '''python3 - <<'PY'
+import datetime as dt
+import hashlib
+import json
+import os
+import subprocess
+import sys
+import traceback
+from pathlib import Path
+
+import pyarrow.parquet as pq
+
+output_dir = Path("/app/output")
+report_path = output_dir / "determinism_report.json"
+entrypoint = Path("/app/src/pipeline/main.py")
+artifact_names = [
+    "model_coefficients.parquet",
+    "model_diagnostics.json",
+    "predicted_rates.parquet",
+    "validation.json",
+]
+
+
+def normalize(value):
+    if isinstance(value, (dt.datetime, dt.date, dt.time)):
+        return value.isoformat()
+    if isinstance(value, bytes):
+        return value.hex()
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)
+
+
+def semantic_fingerprint(path):
+    if path.suffix == ".parquet":
+        table = pq.read_table(path)
+        rows = [
+            {name: normalize(value) for name, value in row.items()}
+            for row in table.to_pylist()
+        ]
+        if path.name == "model_coefficients.parquet":
+            rows.sort(key=lambda row: (row["model"], row["term"]))
+        elif path.name == "predicted_rates.parquet":
+            rows.sort(key=lambda row: (row["date"], row["customer_id"]))
+        payload = {
+            "columns": table.column_names,
+            "types": [str(field.type) for field in table.schema],
+            "rows": rows,
+        }
+    else:
+        payload = json.loads(path.read_text())
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def snapshot():
+    result = {}
+    for name in artifact_names:
+        path = output_dir / name
+        if path.is_file() and path.stat().st_size > 0:
+            try:
+                result[name] = semantic_fingerprint(path)
+            except Exception:
+                result[name] = "INVALID"
+    return result
+
+
+output_dir.mkdir(parents=True, exist_ok=True)
+before = snapshot()
+try:
+    run = subprocess.run(
+        [sys.executable, str(entrypoint)],
+        cwd="/app",
+        env={**os.environ, "APP_DIR": "/app"},
+        capture_output=True,
+        text=True,
+        timeout=540,
+    )
+    run_result = {
+        "succeeded": run.returncode == 0,
+        "return_code": run.returncode,
+        "stdout_tail": run.stdout[-2000:],
+        "stderr_tail": run.stderr[-2000:],
+    }
+except Exception:
+    run_result = {
+        "succeeded": False,
+        "return_code": None,
+        "stdout_tail": "",
+        "stderr_tail": traceback.format_exc()[-4000:],
+    }
+after = snapshot()
+all_before = set(before) == set(artifact_names) and "INVALID" not in before.values()
+all_after = set(after) == set(artifact_names) and "INVALID" not in after.values()
+report = {
+    "collector_version": 1,
+    "entrypoint": str(entrypoint),
+    "required_outputs": artifact_names,
+    "required_outputs_present_before": all_before,
+    "required_outputs_present_after": all_after,
+    "second_run": run_result,
+    "semantic_fingerprints_before": before,
+    "semantic_fingerprints_after": after,
+    "scientific_outputs_unchanged": all_before and all_after and before == after,
+}
+report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+PY
+'''
