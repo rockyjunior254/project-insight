@@ -119,6 +119,10 @@ def snapshot():
 
 output_dir.mkdir(parents=True, exist_ok=True)
 before = snapshot()
+for name in artifact_names:
+    path = output_dir / name
+    if path.exists():
+        path.unlink()
 try:
     run = subprocess.run(
         [sys.executable, str(entrypoint)],

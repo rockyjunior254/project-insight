@@ -20,7 +20,7 @@ A valid pipeline derives the calendar span and customer set from the input recor
 
 ## Verification explanation
 
-The separate verifier reads its own byte-identical copy of the transaction release and independently reconstructs the grid and fits using an explicit design matrix. It checks schemas, complete keys, all coefficient and prediction values, diagnostics, validation metadata, and the exact model-selection rule with fixed absolute tolerances. A Harbor collect hook runs after the agent phase, snapshots semantic fingerprints for the four scientific outputs, invokes `/app/src/pipeline/main.py` again, and records the run status and before/after fingerprints in `determinism_report.json`. The verifier validates those measurements; it does not import the Oracle implementation or the agent pipeline.
+The separate verifier reads its own byte-identical copy of the transaction release and independently reconstructs the grid and fits using an explicit design matrix. It checks schemas, complete keys, all coefficient and prediction values, diagnostics, validation metadata, and the exact model-selection rule with fixed absolute tolerances. A Harbor collect hook runs after the agent phase, snapshots semantic fingerprints for the four scientific outputs, removes those output files, invokes `/app/src/pipeline/main.py` again, and records whether the outputs were recreated with identical semantic fingerprints in `determinism_report.json`. The verifier validates those measurements; it does not import the Oracle implementation or the agent pipeline.
 
 ## Relevant experience
 
@@ -36,3 +36,5 @@ harbor run -p . -a nop -e docker
 ```
 
 The Oracle is a separate reference procedure. NOP performs no agent work; it should receive reward `0` because the required outputs are absent.
+
+The Compose files set `build.network: host` only for image-build dependency installation. Harbor's runtime policy remains public for the agent environment and no-network for the separate verifier; the verifier's no-network policy is enforced by Harbor's egress-control sidecar.
